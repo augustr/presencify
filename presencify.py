@@ -41,7 +41,12 @@ class Presencify:
                         print "[%s] Signal state: %s" % (ip_address, str(state))
                         self._signal(ip_address, state)
                         self._last_state[ip_address]['last_state'] = state
-                        self._last_state[ip_address]['last_timestamp'] = time.time()
+
+                # Only update last timestamp if state is True. This makes sense
+                # because we want to track the time of the latest ON->OFF transition
+                # when we want to decide if should signal OFF. But an OFF->ON transition
+                # should always trigger a signal no matter what.
+                self._last_state[ip_address]['last_timestamp'] = time.time()
 
             # Sleep until next check
             time.sleep(self._interval)
