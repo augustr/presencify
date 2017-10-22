@@ -4,10 +4,12 @@ import time
 import requests
 import os
 import ConfigParser
+import sys
 
 class Presencify:
-    def __init__(self, ip_addresses, interval, fail_retries, fail_margin, initial_status, timeout, callback):
-        self._ip_addresses   = ip_addresses
+    def __init__(self, ip_macs, iphones, interval, fail_retries, fail_margin, initial_status, timeout, callback):
+        self._ip_macs        = ip_macs
+        self._iphones        = iphones
         self._interval       = interval
         self._fail_retries   = fail_retries
         self._fail_margin    = fail_margin
@@ -19,14 +21,14 @@ class Presencify:
         self._init()
 
     def _init(self):
-        for ip_address in self._ip_addresses:
+        for ip_address in self._ip_macs:
             self._last_state[ip_address] = { 'last_state': self._initial_status,
                                              'last_timestamp': 0 }
 
     def run(self):
         while True:
             # Go through ip addresses and ping them individually
-            for ip_address in self._ip_addresses:
+            for ip_address in self._ip_macs:
                 state = self._is_reachable(ip_address, self._fail_retries, self._timeout)
 
                 print "[%s] State: %s, Last: %s, Timestamp: %d" % (ip_address,
@@ -63,8 +65,12 @@ class Presencify:
         return False
 
     def _ping(self, ip_address, timeout):
-        print "Pinging %s with timeout %d" % (ip_address, timeout)
-        return os.system("ping -c 1 -t %d %s > /dev/null" % (timeout, ip_address)) == 0
+        if ip_address in self._iphones:
+            print "hping3:ing and arping %s with mac %s and timeout %d" % (ip_address, self._ip_macs[ip_address], timeout)
+            return os.system("./ping_iphone.sh %s %s" % (ip_address, self._ip_macs[ip_address])) == 0
+        else:
+            print "Pinging %s with timeout %d" % (ip_address, timeout)
+            return os.system("ping -c 1 -t %d %s > /dev/null" % (timeout, ip_address)) == 0
 
     def _signal(self, ip_address, state):
         self._callback(ip_address, state)
@@ -92,23 +98,27 @@ if __name__ == '__main__':
 
     config.read("presencify.conf")
 
-    ip_addresses = None
-    items        = None
-    rest_url     = None
+    ip_addresses  = None
+    mac_addresses = None
+    items         = None
+    rest_url      = None
 
     try:
-        ip_addresses = config.get("presencify", "ip_addresses").split(',')
-        item_list    = config.get("presencify", "items").split(',')
-        rest_url     = config.get("presencify", "rest_url")
+        ip_addresses  = config.get("presencify", "ip_addresses").split(',')
+        mac_addresses = config.get("presencify", "mac_addresses").split(',')
+        iphones       = config.get("presencify", "iphones").split(',')
+        item_list     = config.get("presencify", "items").split(',')
+        rest_url      = config.get("presencify", "rest_url")
 
         items = dict(zip(ip_addresses, item_list))
+        ip_macs = dict(zip(ip_addresses, mac_addresses))
     except Exception, e:
         print "Error reading config file. Missing required parameters?"
         sys.exit(1)
 
     rest_signaler = RestSignaler(rest_url, items)
 
-    presencify = Presencify(ip_addresses,
+    presencify = Presencify(ip_macs, iphones,
                             int(config.get("presencify", "interval")),
                             int(config.get("presencify", "fail_retries")),
                             int(config.get("presencify", "fail_margin")),
