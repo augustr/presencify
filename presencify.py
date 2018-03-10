@@ -5,6 +5,7 @@ import requests
 import os
 import ConfigParser
 import sys
+import datetime
 
 class Presencify:
     def __init__(self, ip_macs, iphones, interval, fail_retries, fail_margin, initial_status, timeout, callback):
@@ -31,16 +32,16 @@ class Presencify:
             for ip_address in self._ip_macs:
                 state = self._is_reachable(ip_address, self._fail_retries, self._timeout)
 
-                print "[%s] State: %s, Last: %s, Timestamp: %d" % (ip_address,
-                                                                   str(state),
-                                                                   self._last_state[ip_address]['last_state'],
-                                                                   self._last_state[ip_address]['last_timestamp'])
+                log("({}) State: {}, Last: {}, Datetime: {}".format(ip_address,
+                                                                    str(state),
+                                                                    self._last_state[ip_address]['last_state'],
+                                                                    timestamp_to_str(self._last_state[ip_address]['last_timestamp'])))
 
                 if self._last_state[ip_address]['last_state'] != state:
                     # If new state is off and old state is on, make sure that old state is old enough
                     now_minus_margin = time.time() - self._fail_margin
                     if state or self._last_state[ip_address]['last_timestamp'] < now_minus_margin:
-                        print "[%s] Signal state: %s" % (ip_address, str(state))
+                        log("({}) Signal state: {}".format(ip_address, str(state)))
                         self._signal(ip_address, state)
                         self._last_state[ip_address]['last_state'] = state
 
@@ -66,10 +67,10 @@ class Presencify:
 
     def _ping(self, ip_address, timeout):
         if ip_address in self._iphones:
-            print "hping3:ing and arping %s with mac %s and timeout %d" % (ip_address, self._ip_macs[ip_address], timeout)
+            log("hping3:ing and arping {} with mac {} and timeout {}".format(ip_address, self._ip_macs[ip_address], timeout))
             return os.system("./ping_iphone.sh %s %s" % (ip_address, self._ip_macs[ip_address])) == 0
         else:
-            print "Pinging %s with timeout %d" % (ip_address, timeout)
+            log("Pinging {} with timeout {}".format(ip_address, timeout))
             return os.system("ping -c 1 -t %d %s > /dev/null" % (timeout, ip_address)) == 0
 
     def _signal(self, ip_address, state):
@@ -85,7 +86,14 @@ class RestSignaler:
         url = self._url + "/" + self._items[ip_address] + "/state"
         response = requests.put(url, data=data)
         if not response.ok:
-            print "Error during REST update: " + response.content
+            log("Error during REST update: {}".format(response.content))
+
+def log(message):
+    current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print("[{}] {}".format(current_time, message))
+
+def timestamp_to_str(timestamp):
+    return datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
 
 if __name__ == '__main__':
     defaults = {'interval':       '5',
@@ -113,7 +121,7 @@ if __name__ == '__main__':
         items = dict(zip(ip_addresses, item_list))
         ip_macs = dict(zip(ip_addresses, mac_addresses))
     except Exception, e:
-        print "Error reading config file. Missing required parameters?"
+        log("Error reading config file. Missing required parameters?")
         sys.exit(1)
 
     rest_signaler = RestSignaler(rest_url, items)
